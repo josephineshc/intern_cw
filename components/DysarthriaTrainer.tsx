@@ -1265,7 +1265,7 @@ export default function DysarthriaTrainer() {
 
     if (window.FaceMesh) {
       localFaceMesh = new window.FaceMesh({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559585/${file}`,
       });
       localFaceMesh.setOptions({
         maxNumFaces: 1,
