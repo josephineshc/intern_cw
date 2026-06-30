@@ -5,25 +5,25 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Activity, 
-  Mic, 
-  MicOff, 
-  Smile, 
-  Sparkles, 
-  Trophy, 
-  Volume2, 
-  RefreshCw, 
-  Brain, 
-  Play, 
-  Pause, 
-  CheckCircle, 
-  User, 
-  ShieldAlert, 
-  Info, 
-  Zap, 
-  Flame, 
-  Compass, 
+import {
+  Activity,
+  Mic,
+  MicOff,
+  Smile,
+  Sparkles,
+  Trophy,
+  Volume2,
+  RefreshCw,
+  Brain,
+  Play,
+  Pause,
+  CheckCircle,
+  User,
+  ShieldAlert,
+  Info,
+  Zap,
+  Flame,
+  Compass,
   Award,
   BookOpen,
   ChevronRight,
@@ -38,15 +38,15 @@ import {
 import { ExerciseType, Exercise, SessionStats, SpeechDrillItem, SpeechAnalysisResult, AiFeedbackResponse } from '../types';
 import { analyzeSpeechPerformance } from '../services/geminiService';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { 
-  auth, 
-  signInWithGoogle, 
-  logOut as firebaseLogOut, 
-  getOrCreateUserProfile, 
-  saveUserProfile, 
-  saveTrainingSession, 
-  getUserSessions, 
-  UserProfileData 
+import {
+  auth,
+  signInWithGoogle,
+  logOut as firebaseLogOut,
+  getOrCreateUserProfile,
+  saveUserProfile,
+  saveTrainingSession,
+  getUserSessions,
+  UserProfileData
 } from '../services/firebaseService';
 
 // Available speech targets for the Articulation Drills grouped by Language/Mode
@@ -346,6 +346,7 @@ export default function DysarthriaTrainer() {
   // Media references
   const [cameraLoading, setCameraLoading] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraPreviewOnly, setCameraPreviewOnly] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -360,6 +361,7 @@ export default function DysarthriaTrainer() {
   // Speech Recognition refs
   const [isListening, setIsListening] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
   // Refs for tracking animation frames & Mediapipe loop
@@ -381,7 +383,7 @@ export default function DysarthriaTrainer() {
     setSelectedDrill(DRILL_PHRASES_BY_LANG[languageMode][0]);
     resetLivePerformanceMetrics();
   }, [languageMode]);
-  
+
   // Tracking Stats
   const [stats, setStats] = useState<SessionStats>(() => {
     const saved = localStorage.getItem('dysarthria_trainer_stats_v2');
@@ -420,7 +422,7 @@ export default function DysarthriaTrainer() {
         try {
           const profile = await getOrCreateUserProfile(user);
           setUserProfile(profile);
-          
+
           setIsCalibrated(profile.isCalibrated);
           setRestingSmileWidth(profile.restingSmileWidth ?? 0.38);
           setRestingPuckerRatio(profile.restingPuckerRatio ?? 0.12);
@@ -525,12 +527,13 @@ export default function DysarthriaTrainer() {
   const startSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("이 브라우저는 음성 인식을 지원하지 않습니다. 크롬(Chrome)이나 사파리(Safari) 브라우저를 이용해 주세요.");
+      setSpeechError("이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Safari에서 다시 시도해 주세요.");
       return;
     }
 
     try {
       setSpeechTranscript('');
+      setSpeechError(null);
       const rec = new SpeechRecognition();
       rec.continuous = false;
       rec.interimResults = true;
@@ -566,6 +569,16 @@ export default function DysarthriaTrainer() {
 
       rec.onerror = (err: any) => {
         console.error("Speech recognition error:", err);
+        const errorType = err?.error;
+        const messageByError: Record<string, string> = {
+          'not-allowed': "마이크 권한이 차단되었습니다. 브라우저 주소창의 권한 설정에서 마이크를 허용해 주세요.",
+          'service-not-allowed': "브라우저 음성 인식 서비스가 차단되었습니다. Chrome 또는 Safari에서 마이크 권한을 확인해 주세요.",
+          'audio-capture': "마이크를 찾을 수 없습니다. 입력 장치가 연결되어 있는지 확인해 주세요.",
+          'no-speech': "음성이 감지되지 않았습니다. 버튼을 다시 누른 뒤 조금 더 가까이 말해 주세요.",
+          'network': "음성 인식 서비스에 연결할 수 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+          'language-not-supported': "선택한 언어의 음성 인식이 이 브라우저에서 지원되지 않습니다."
+        };
+        setSpeechError(messageByError[errorType] || "음성 인식을 시작하지 못했습니다. 마이크 권한을 확인한 뒤 다시 시도해 주세요.");
         setIsListening(false);
         setIsRunning(false);
         stopAudioTracking();
@@ -581,6 +594,9 @@ export default function DysarthriaTrainer() {
       rec.start();
     } catch (e) {
       console.error(e);
+      setSpeechError("음성 인식을 시작하지 못했습니다. 마이크 권한을 확인한 뒤 다시 시도해 주세요.");
+      setIsListening(false);
+      setIsRunning(false);
     }
   };
 
@@ -744,25 +760,25 @@ export default function DysarthriaTrainer() {
   // Play standard exemplar using Web Speech Synthesis TTS
   const playTTS = (phrase: string) => {
     if (!window.speechSynthesis) return;
-    
+
     // Stop any active speech
     window.speechSynthesis.cancel();
-    
+
     // Extract orthographic phrase by removing phonetic annotation inside brackets
     const cleanText = phrase.split('[')[0].trim();
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    
+
     // Configure voice language based on training mode
     if (languageMode === 'en') {
       utterance.lang = 'en-US';
     } else {
       utterance.lang = 'ko-KR';
     }
-    
+
     // Slightly deliberate and steady tempo for optimal clinical modeling
     utterance.rate = 0.8;
     utterance.pitch = 1.0;
-    
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -832,11 +848,11 @@ export default function DysarthriaTrainer() {
   // Award Points
   const awardExercisePoints = async () => {
     const pointsGain = 100;
-    
+
     setStats(prev => {
       const updatedCompleted = { ...prev.completedExercises };
       updatedCompleted[selectedExercise.id] = (updatedCompleted[selectedExercise.id] || 0) + 1;
-      
+
       // Update history
       const now = new Date();
       const timestamp = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -874,7 +890,7 @@ export default function DysarthriaTrainer() {
             vowelSustainDuration: sessionSustainDuration
           },
           feedback: {
-            assessment: languageMode === 'en' 
+            assessment: languageMode === 'en'
               ? `Completed ${selectedExercise.name} exercise successfully.`
               : `${selectedExercise.name} 구어 연습을 성공적으로 마쳤습니다.`,
             phoneticFeedback: languageMode === 'en'
@@ -927,6 +943,7 @@ export default function DysarthriaTrainer() {
     } catch (err) {
       console.error("Audio capture failed:", err);
       setAudioPermissionError(true);
+      setSpeechError("마이크 입력을 열 수 없습니다. 브라우저 권한에서 마이크를 허용해 주세요.");
     }
   };
 
@@ -1042,7 +1059,7 @@ export default function DysarthriaTrainer() {
     setSessionMaxSmile(p => Math.max(p, smileValue));
     setSessionMaxPucker(p => Math.max(p, puckerValue));
     setSessionMaxMouthOpen(p => Math.max(p, openValue));
-    
+
     // Average out asymmetry deviation (closer to 1 is perfect, so deviation is 1 - symmetry)
     const deviation = 1 - symmetryValue;
     setSessionSymmetryDeviation(p => p * 0.95 + deviation * 0.05);
@@ -1058,7 +1075,7 @@ export default function DysarthriaTrainer() {
       }
     } else if (selectedExercise.id === 'lip_pucker') {
       // Lip vertical to horizontal ratio must rise, width must shrink
-      const puckerRequired = restingPuckerRatio * 2.5; 
+      const puckerRequired = restingPuckerRatio * 2.5;
       if (puckerValue >= puckerRequired && smileValue < restingSmileWidth * 0.95) {
         targetMet = true;
       }
@@ -1116,16 +1133,57 @@ export default function DysarthriaTrainer() {
 
     setCameraLoading(true);
     setCameraError(null);
+    setCameraPreviewOnly(false);
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let localFaceMesh: any = null;
     let localCamera: any = null;
+    let localPreviewStream: MediaStream | null = null;
+    let previewFrameId: number | null = null;
+
+    const startCameraPreviewOnly = async (message: string) => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("이 브라우저는 카메라 입력을 지원하지 않습니다. Chrome 또는 Safari에서 다시 시도해 주세요.");
+        setCameraLoading(false);
+        return;
+      }
+
+      try {
+        localPreviewStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: false,
+        });
+        video.srcObject = localPreviewStream;
+        await video.play();
+        setCameraPreviewOnly(true);
+        setCameraError(message);
+        setCameraLoading(false);
+
+        const drawPreview = () => {
+          if (!videoRef.current || !canvasRef.current) return;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          previewFrameId = requestAnimationFrame(drawPreview);
+        };
+        drawPreview();
+      } catch (err: any) {
+        console.error("Camera preview failed:", err);
+        const denied = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
+        setCameraError(
+          denied
+            ? "카메라 권한이 차단되었습니다. 브라우저 주소창의 권한 설정에서 카메라를 허용해 주세요."
+            : "카메라를 열 수 없습니다. 다른 앱이 카메라를 사용 중인지 확인해 주세요."
+        );
+        setCameraPreviewOnly(false);
+        setCameraLoading(false);
+      }
+    };
 
     const onResults = (results: any) => {
       setCameraLoading(false);
-      
+
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1133,7 +1191,7 @@ export default function DysarthriaTrainer() {
       ctx.save();
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
-      
+
       // Draw the mirrored webcam image to canvas
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
@@ -1153,17 +1211,17 @@ export default function DysarthriaTrainer() {
         if (leftCorner && rightCorner && topLip && bottomLip && cheekLeft && cheekRight) {
           // Normalize distances based on overall cheek-to-cheek horizontal distance
           const cheekDist = Math.sqrt(
-            Math.pow(cheekLeft.x - cheekRight.x, 2) + 
+            Math.pow(cheekLeft.x - cheekRight.x, 2) +
             Math.pow(cheekLeft.y - cheekRight.y, 2)
           );
 
           // Oral Metrics Calculations
           const lipWidthRaw = Math.sqrt(
-            Math.pow(leftCorner.x - rightCorner.x, 2) + 
+            Math.pow(leftCorner.x - rightCorner.x, 2) +
             Math.pow(leftCorner.y - rightCorner.y, 2)
           );
           const lipHeightRaw = Math.sqrt(
-            Math.pow(topLip.x - bottomLip.x, 2) + 
+            Math.pow(topLip.x - bottomLip.x, 2) +
             Math.pow(topLip.y - bottomLip.y, 2)
           );
 
@@ -1175,7 +1233,7 @@ export default function DysarthriaTrainer() {
           const midlineX = centerNose ? centerNose.x : (cheekLeft.x + cheekRight.x) / 2;
           const leftMouthDist = Math.abs(leftCorner.x - midlineX);
           const rightMouthDist = Math.abs(rightCorner.x - midlineX);
-          const rawSymmetry = (leftMouthDist + rightMouthDist) > 0 
+          const rawSymmetry = (leftMouthDist + rightMouthDist) > 0
             ? 1 - (Math.abs(leftMouthDist - rightMouthDist) / (leftMouthDist + rightMouthDist))
             : 1.0;
 
@@ -1248,7 +1306,7 @@ export default function DysarthriaTrainer() {
           ctx.stroke();
         }
       }
-      
+
       // Restore normal coordinate system
       ctx.restore();
 
@@ -1293,17 +1351,22 @@ export default function DysarthriaTrainer() {
           .then(() => setCameraLoading(false))
           .catch((err: any) => {
             console.error(err);
-            setCameraError("Camera capture failed to initialize. Please check permissions.");
+            startCameraPreviewOnly("정밀 얼굴 추적은 시작하지 못했지만, 카메라 미리보기는 사용할 수 있습니다. 권한을 확인한 뒤 새로고침해 주세요.");
           });
+      } else {
+        startCameraPreviewOnly("MediaPipe Camera 모듈을 불러오지 못해 정밀 얼굴 추적 없이 카메라 미리보기만 표시합니다. 네트워크 또는 CDN 차단을 확인해 주세요.");
       }
     } else {
-      setCameraError("MediaPipe FaceMesh failed to load from CDNs. Please reload.");
+      startCameraPreviewOnly("MediaPipe FaceMesh를 불러오지 못해 정밀 얼굴 추적 없이 카메라 미리보기만 표시합니다. 네트워크 또는 CDN 차단을 확인해 주세요.");
     }
 
     faceMeshRef.current = localFaceMesh;
     cameraRef.current = localCamera;
 
     return () => {
+      if (previewFrameId !== null) cancelAnimationFrame(previewFrameId);
+      if (localPreviewStream) localPreviewStream.getTracks().forEach(track => track.stop());
+      if (video.srcObject) video.srcObject = null;
       if (localCamera) localCamera.stop();
       if (localFaceMesh) localFaceMesh.close();
       stopAudioTracking();
@@ -1333,6 +1396,10 @@ export default function DysarthriaTrainer() {
     }
   }, [sessionSustainDuration, isRunning, selectedExercise]);
 
+  const completedExerciseCounts: number[] = Object.values(stats.completedExercises).map(Number);
+  const totalCompletedExercises = completedExerciseCounts.reduce((total, count) => total + count, 0);
+  const maxCompletedExercises = Math.max(...completedExerciseCounts, 1);
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col font-sans select-none antialiased">
       {/* Header navigation bar */}
@@ -1356,11 +1423,10 @@ export default function DysarthriaTrainer() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  activeTab === tab
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === tab
                     ? 'bg-gray-800 text-teal-400 shadow-md border border-gray-700/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900'
-                }`}
+                  }`}
               >
                 {TAB_TRANSLATIONS[tab]}
               </button>
@@ -1384,9 +1450,9 @@ export default function DysarthriaTrainer() {
             ) : currentUser ? (
               <div className="flex items-center gap-2.5 bg-gray-950/80 border border-gray-800 rounded-xl p-1 pr-2.5">
                 {currentUser.photoURL ? (
-                  <img 
-                    src={currentUser.photoURL} 
-                    alt="User" 
+                  <img
+                    src={currentUser.photoURL}
+                    alt="User"
                     referrerPolicy="no-referrer"
                     className="w-7 h-7 rounded-lg border border-teal-500/30 object-cover"
                   />
@@ -1479,11 +1545,23 @@ export default function DysarthriaTrainer() {
                     )}
 
                     {/* Camera Error Message */}
-                    {cameraError && (
+                    {cameraError && !cameraPreviewOnly && (
                       <div className="absolute inset-0 bg-gray-950 flex flex-col items-center justify-center p-6 text-center gap-3">
                         <ShieldAlert className="w-12 h-12 text-rose-500 animate-bounce" />
                         <h4 className="font-bold text-lg">카메라 연결 실패</h4>
                         <p className="text-sm text-gray-400 max-w-sm">{cameraError}</p>
+                      </div>
+                    )}
+
+                    {cameraError && cameraPreviewOnly && (
+                      <div className="absolute left-4 right-4 bottom-4 bg-gray-950/90 backdrop-blur-md border border-amber-500/30 rounded-2xl p-3 text-left shadow-lg">
+                        <div className="flex gap-2">
+                          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-xs font-bold text-amber-300">정밀 얼굴 추적 비활성화</h4>
+                            <p className="text-[11px] text-gray-300 mt-0.5">{cameraError}</p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -1498,7 +1576,7 @@ export default function DysarthriaTrainer() {
                             <span className="text-[8px] text-gray-500">{(restingSmileWidth * 10).toFixed(1)} 기준</span>
                           </div>
                           <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mt-1">
-                            <div 
+                            <div
                               className="h-full bg-teal-500 transition-all duration-75"
                               style={{ width: `${Math.min(100, (liveSmile / (restingSmileWidth * 1.3)) * 100)}%` }}
                             />
@@ -1513,7 +1591,7 @@ export default function DysarthriaTrainer() {
                             <span className="text-[8px] text-gray-500">{(restingPuckerRatio * 2.5).toFixed(2)} 목표</span>
                           </div>
                           <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mt-1">
-                            <div 
+                            <div
                               className="h-full bg-cyan-500 transition-all duration-75"
                               style={{ width: `${Math.min(100, (livePucker / (restingPuckerRatio * 2.5)) * 100)}%` }}
                             />
@@ -1528,7 +1606,7 @@ export default function DysarthriaTrainer() {
                             <span className="text-[8px] text-gray-500">{(restingMouthOpen * 10 * 2).toFixed(1)} 목표</span>
                           </div>
                           <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mt-1">
-                            <div 
+                            <div
                               className="h-full bg-amber-500 transition-all duration-75"
                               style={{ width: `${Math.min(100, (liveOpen / (restingMouthOpen * 2)) * 100)}%` }}
                             />
@@ -1561,7 +1639,7 @@ export default function DysarthriaTrainer() {
 
                     {/* SUCCESS ANIMATION CONTAINER */}
                     {exerciseComplete && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className="absolute inset-0 bg-teal-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20"
@@ -1585,7 +1663,7 @@ export default function DysarthriaTrainer() {
                           >
                             다시 연습하기
                           </button>
-                          
+
                           {/* Generate AI Analysis Button */}
                           <button
                             onClick={triggerAiReview}
@@ -1660,7 +1738,7 @@ export default function DysarthriaTrainer() {
 
               {/* Right Column: Active Exercise Workspace (Speech Articulation Drills) */}
               <div className="lg:col-span-7 space-y-6">
-                
+
                 {/* Workspace Board */}
                 <div className="bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
                   {/* Title Bar */}
@@ -1675,226 +1753,224 @@ export default function DysarthriaTrainer() {
                   </div>
 
                   <div className="p-6 bg-gray-950/60 space-y-5">
-                      
-                      {/* Language & Accent Mode Selector */}
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">재활 발음 언어 및 버전 선택 (Training Language & Mode)</label>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-gray-900/80 p-1.5 rounded-2xl border border-gray-800/80">
-                          <button
-                            type="button"
-                            onClick={() => setLanguageMode('en')}
-                            className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                              languageMode === 'en'
-                                ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
-                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+
+                    {/* Language & Accent Mode Selector */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">재활 발음 언어 및 버전 선택 (Training Language & Mode)</label>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-gray-900/80 p-1.5 rounded-2xl border border-gray-800/80">
+                        <button
+                          type="button"
+                          onClick={() => setLanguageMode('en')}
+                          className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${languageMode === 'en'
+                              ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             }`}
-                          >
-                            <span className="text-sm">🇺🇸</span> English (en-US)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setLanguageMode('ko_std')}
-                            className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                              languageMode === 'ko_std'
-                                ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
-                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        >
+                          <span className="text-sm">🇺🇸</span> English (en-US)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLanguageMode('ko_std')}
+                          className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${languageMode === 'ko_std'
+                              ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             }`}
-                          >
-                            <span className="text-sm">🇰🇷</span> 한국어 (표준어)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setLanguageMode('ko_phon')}
-                            className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                              languageMode === 'ko_phon'
-                                ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
-                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        >
+                          <span className="text-sm">🇰🇷</span> 한국어 (표준어)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLanguageMode('ko_phon')}
+                          className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${languageMode === 'ko_phon'
+                              ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             }`}
-                          >
-                            <span className="text-sm">🇰🇷</span> 실제 발음법 표기
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setLanguageMode('ko_dialect')}
-                            className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                              languageMode === 'ko_dialect'
-                                ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
-                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        >
+                          <span className="text-sm">🇰🇷</span> 실제 발음법 표기
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLanguageMode('ko_dialect')}
+                          className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${languageMode === 'ko_dialect'
+                              ? 'bg-teal-500 text-gray-950 font-bold shadow-lg shadow-teal-500/10'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800'
                             }`}
-                          >
-                            <span className="text-sm">🇰🇷</span> 경상 방언/억양
-                          </button>
-                        </div>
+                        >
+                          <span className="text-sm">🇰🇷</span> 경상 방언/억양
+                        </button>
                       </div>
+                    </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                        
-                        {/* List of custom drills */}
-                        <div className="md:col-span-5 space-y-2">
-                          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
-                            {MULTILINGUAL_UI[languageMode].selectDrill}
-                          </label>
-                          <div className="max-h-56 overflow-y-auto space-y-1.5 border border-gray-800 rounded-2xl p-2 bg-gray-950">
-                            {DRILL_PHRASES_BY_LANG[languageMode].map((drill, idx) => {
-                              const isSelected = selectedDrill.phrase === drill.phrase;
-                              const ui = MULTILINGUAL_UI[languageMode];
-                              const difficultyLabel = drill.difficulty === 'Easy' ? ui.difficultyEasy :
-                                                    drill.difficulty === 'Medium' ? ui.difficultyMedium :
-                                                    ui.difficultyHard;
-                              return (
-                                <button
-                                  key={idx}
-                                  onClick={() => {
-                                    setSelectedDrill(drill);
-                                    resetLivePerformanceMetrics();
-                                  }}
-                                  className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all ${
-                                    isSelected 
-                                      ? 'bg-teal-500/15 border-teal-500/35 text-teal-300 font-semibold' 
-                                      : 'hover:bg-gray-900 border-transparent text-gray-400'
-                                  }`}
-                                >
-                                  <div className="flex justify-between items-center">
-                                    <span className="font-semibold">"{drill.phrase}"</span>
-                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
-                                      drill.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-400' :
-                                      drill.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-400' :
-                                      'bg-rose-500/10 text-rose-400'
-                                    }`}>
-                                      {difficultyLabel}
-                                    </span>
-                                  </div>
-                                  <span className="text-[9px] text-gray-500 block mt-0.5">{drill.category}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
-                        {/* Interactive Speech Rec Controller */}
-                        <div className="md:col-span-7 flex flex-col justify-between space-y-4">
-                          <div className="space-y-2">
-                            <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
-                              {MULTILINGUAL_UI[languageMode].sayFollowing}
-                            </span>
-                            <div className="bg-gray-950 border border-gray-800 rounded-2xl p-4 text-center">
-                              <p className="text-xl font-bold text-white tracking-wide">"{selectedDrill.phrase}"</p>
-                              <p className="text-[10px] text-teal-400 mt-1.5 font-medium">
-                                {MULTILINGUAL_UI[languageMode].targetPhoneme}: /{selectedDrill.targetPhoneme}/
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Controls & Speech Transcription output */}
-                          <div className="space-y-2">
-                            <div className="flex gap-2">
+                      {/* List of custom drills */}
+                      <div className="md:col-span-5 space-y-2">
+                        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
+                          {MULTILINGUAL_UI[languageMode].selectDrill}
+                        </label>
+                        <div className="max-h-56 overflow-y-auto space-y-1.5 border border-gray-800 rounded-2xl p-2 bg-gray-950">
+                          {DRILL_PHRASES_BY_LANG[languageMode].map((drill, idx) => {
+                            const isSelected = selectedDrill.phrase === drill.phrase;
+                            const ui = MULTILINGUAL_UI[languageMode];
+                            const difficultyLabel = drill.difficulty === 'Easy' ? ui.difficultyEasy :
+                              drill.difficulty === 'Medium' ? ui.difficultyMedium :
+                                ui.difficultyHard;
+                            return (
                               <button
-                                onClick={toggleSpeechRecognition}
-                                className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 border transition ${
-                                  isListening 
-                                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse' 
-                                    : 'bg-gray-900 hover:bg-gray-800 text-teal-400 border-gray-800'
+                                key={idx}
+                                onClick={() => {
+                                  setSelectedDrill(drill);
+                                  resetLivePerformanceMetrics();
+                                }}
+                                className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all ${isSelected
+                                    ? 'bg-teal-500/15 border-teal-500/35 text-teal-300 font-semibold'
+                                    : 'hover:bg-gray-900 border-transparent text-gray-400'
                                   }`}
                               >
-                                {isListening ? (
-                                  <>
-                                    <MicOff className="w-4 h-4 text-rose-400" /> {MULTILINGUAL_UI[languageMode].stopListening}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Mic className="w-4 h-4 text-teal-400" /> {MULTILINGUAL_UI[languageMode].speakNow}
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            {/* Captured Speech Output */}
-                            <div className="bg-gray-950 p-3 rounded-2xl border border-gray-800/80 min-h-[50px] flex items-center justify-between text-xs">
-                              <div className="flex-1">
-                                <span className="text-[9px] text-gray-500 block uppercase font-bold">
-                                  {MULTILINGUAL_UI[languageMode].realtimeTranscript}
-                                </span>
-                                <p className="text-white italic mt-1 font-medium">
-                                  {speechTranscript || <span className="text-gray-600 font-normal">"{MULTILINGUAL_UI[languageMode].waitingSpeech}"</span>}
-                                </p>
-                              </div>
-                              {speechSuccessRate !== null && (
-                                <div className="text-right shrink-0 bg-gray-900 px-3 py-1 rounded-xl border border-gray-800 ml-4">
-                                  <span className="text-[9px] text-gray-500 block font-bold uppercase">
-                                    {MULTILINGUAL_UI[languageMode].accuracy}
-                                  </span>
-                                  <span className={`text-sm font-bold font-mono ${speechSuccessRate >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                    {speechSuccessRate}%
+                                <div className="flex justify-between items-center">
+                                  <span className="font-semibold">"{drill.phrase}"</span>
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${drill.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-400' :
+                                      drill.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-400' :
+                                        'bg-rose-500/10 text-rose-400'
+                                    }`}>
+                                    {difficultyLabel}
                                   </span>
                                 </div>
-                              )}
-                            </div>
+                                <span className="text-[9px] text-gray-500 block mt-0.5">{drill.category}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Interactive Speech Rec Controller */}
+                      <div className="md:col-span-7 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
+                            {MULTILINGUAL_UI[languageMode].sayFollowing}
+                          </span>
+                          <div className="bg-gray-950 border border-gray-800 rounded-2xl p-4 text-center">
+                            <p className="text-xl font-bold text-white tracking-wide">"{selectedDrill.phrase}"</p>
+                            <p className="text-[10px] text-teal-400 mt-1.5 font-medium">
+                              {MULTILINGUAL_UI[languageMode].targetPhoneme}: /{selectedDrill.targetPhoneme}/
+                            </p>
                           </div>
                         </div>
 
-                      </div>
-
-                      {/* Interactive Pronunciation Guide & Answer Sheet Helper */}
-                      <div className="pt-5 border-t border-gray-800/80 mt-6">
-                        <div className="bg-gray-950/85 border border-teal-500/15 rounded-2xl p-5 space-y-4 shadow-inner">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <Volume2 className="w-5 h-5 text-teal-400" />
-                              <div>
-                                <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-                                  임상 조음 모범 답안 <span className="text-[10px] bg-teal-500/15 text-teal-300 font-bold px-2 py-0.5 rounded border border-teal-500/20 uppercase">안내서 (Answer Sheet)</span>
-                                </h4>
-                                <p className="text-[10px] text-gray-400">전문 언어치료사의 발성 억양, 호흡 조절 및 오디오 정박 템포 기준표</p>
-                              </div>
-                            </div>
-                            
-                            {/* Standard Pronunciation Playback Button */}
+                        {/* Controls & Speech Transcription output */}
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
                             <button
-                              type="button"
-                              onClick={() => playTTS(selectedDrill.phrase)}
-                              className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-400 hover:to-teal-300 text-gray-950 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-teal-500/10 active:scale-95"
+                              onClick={toggleSpeechRecognition}
+                              className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 border transition ${isListening
+                                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse'
+                                  : 'bg-gray-900 hover:bg-gray-800 text-teal-400 border-gray-800'
+                                }`}
                             >
-                              <Play className="w-3.5 h-3.5 fill-current" />
-                              {languageMode === 'en' ? 'Play Standard Audio' : '모범 표준 발음 듣기'}
+                              {isListening ? (
+                                <>
+                                  <MicOff className="w-4 h-4 text-rose-400" /> {MULTILINGUAL_UI[languageMode].stopListening}
+                                </>
+                              ) : (
+                                <>
+                                  <Mic className="w-4 h-4 text-teal-400" /> {MULTILINGUAL_UI[languageMode].speakNow}
+                                </>
+                              )}
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs leading-relaxed">
-                            {/* Mouth Control */}
-                            <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
-                              <span className="text-[10px] font-extrabold text-teal-400 uppercase tracking-wider block flex items-center gap-1.5">
-                                👄 {languageMode === 'en' ? 'Mouth & Lip Control' : '구강 및 입술 제어'}
+                          {/* Captured Speech Output */}
+                          <div className="bg-gray-950 p-3 rounded-2xl border border-gray-800/80 min-h-[50px] flex items-center justify-between text-xs">
+                            <div className="flex-1">
+                              <span className="text-[9px] text-gray-500 block uppercase font-bold">
+                                {MULTILINGUAL_UI[languageMode].realtimeTranscript}
                               </span>
-                              <p className="text-gray-300 font-medium leading-relaxed">
-                                {DRILL_GUIDES[selectedDrill.phrase]?.mouth || (languageMode === 'en' ? 'Place speech articulators naturally.' : '조음 기관을 바르게 위치시키고 명확히 조음하십시오.')}
+                              <p className="text-white italic mt-1 font-medium">
+                                {speechTranscript || <span className="text-gray-600 font-normal">"{MULTILINGUAL_UI[languageMode].waitingSpeech}"</span>}
                               </p>
+                              {(speechError || audioPermissionError) && (
+                                <p className="text-[11px] text-rose-300 mt-2 not-italic font-medium">
+                                  {speechError || "마이크 권한이 필요합니다. 브라우저 권한 설정을 확인해 주세요."}
+                                </p>
+                              )}
                             </div>
+                            {speechSuccessRate !== null && (
+                              <div className="text-right shrink-0 bg-gray-900 px-3 py-1 rounded-xl border border-gray-800 ml-4">
+                                <span className="text-[9px] text-gray-500 block font-bold uppercase">
+                                  {MULTILINGUAL_UI[languageMode].accuracy}
+                                </span>
+                                <span className={`text-sm font-bold font-mono ${speechSuccessRate >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                  {speechSuccessRate}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                            {/* Voicing Tone */}
-                            <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
-                              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
-                                🗣️ {languageMode === 'en' ? 'Voicing Tone & Resonance' : '발성 톤 및 성대 조절'}
-                              </span>
-                              <p className="text-gray-300 font-medium leading-relaxed">
-                                {DRILL_GUIDES[selectedDrill.phrase]?.tone || (languageMode === 'en' ? 'Keep a stable, steady voice pitch.' : '성대 긴장을 조율하며 안정적인 목소리 톤을 내십시오.')}
-                              </p>
-                            </div>
+                    </div>
 
-                            {/* Rhythm & Pacing */}
-                            <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
-                              <span className="text-[10px] font-extrabold text-rose-400 uppercase tracking-wider block flex items-center gap-1.5">
-                                ⏱️ {languageMode === 'en' ? 'Rhythm & Pacing' : '발화 리듬 및 템포'}
-                              </span>
-                              <p className="text-gray-300 font-medium leading-relaxed">
-                                {DRILL_GUIDES[selectedDrill.phrase]?.rhythm || (languageMode === 'en' ? 'Speak with steady, deliberate timing.' : '음절 간 길이를 고르게 배분하고 또박또박 낭독하십시오.')}
-                              </p>
+                    {/* Interactive Pronunciation Guide & Answer Sheet Helper */}
+                    <div className="pt-5 border-t border-gray-800/80 mt-6">
+                      <div className="bg-gray-950/85 border border-teal-500/15 rounded-2xl p-5 space-y-4 shadow-inner">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Volume2 className="w-5 h-5 text-teal-400" />
+                            <div>
+                              <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+                                임상 조음 모범 답안 <span className="text-[10px] bg-teal-500/15 text-teal-300 font-bold px-2 py-0.5 rounded border border-teal-500/20 uppercase">안내서 (Answer Sheet)</span>
+                              </h4>
+                              <p className="text-[10px] text-gray-400">전문 언어치료사의 발성 억양, 호흡 조절 및 오디오 정박 템포 기준표</p>
                             </div>
+                          </div>
+
+                          {/* Standard Pronunciation Playback Button */}
+                          <button
+                            type="button"
+                            onClick={() => playTTS(selectedDrill.phrase)}
+                            className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-400 hover:to-teal-300 text-gray-950 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-teal-500/10 active:scale-95"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            {languageMode === 'en' ? 'Play Standard Audio' : '모범 표준 발음 듣기'}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs leading-relaxed">
+                          {/* Mouth Control */}
+                          <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
+                            <span className="text-[10px] font-extrabold text-teal-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              👄 {languageMode === 'en' ? 'Mouth & Lip Control' : '구강 및 입술 제어'}
+                            </span>
+                            <p className="text-gray-300 font-medium leading-relaxed">
+                              {DRILL_GUIDES[selectedDrill.phrase]?.mouth || (languageMode === 'en' ? 'Place speech articulators naturally.' : '조음 기관을 바르게 위치시키고 명확히 조음하십시오.')}
+                            </p>
+                          </div>
+
+                          {/* Voicing Tone */}
+                          <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
+                            <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              🗣️ {languageMode === 'en' ? 'Voicing Tone & Resonance' : '발성 톤 및 성대 조절'}
+                            </span>
+                            <p className="text-gray-300 font-medium leading-relaxed">
+                              {DRILL_GUIDES[selectedDrill.phrase]?.tone || (languageMode === 'en' ? 'Keep a stable, steady voice pitch.' : '성대 긴장을 조율하며 안정적인 목소리 톤을 내십시오.')}
+                            </p>
+                          </div>
+
+                          {/* Rhythm & Pacing */}
+                          <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-800/80 space-y-1.5 hover:border-teal-500/10 transition-all duration-200">
+                            <span className="text-[10px] font-extrabold text-rose-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              ⏱️ {languageMode === 'en' ? 'Rhythm & Pacing' : '발화 리듬 및 템포'}
+                            </span>
+                            <p className="text-gray-300 font-medium leading-relaxed">
+                              {DRILL_GUIDES[selectedDrill.phrase]?.rhythm || (languageMode === 'en' ? 'Speak with steady, deliberate timing.' : '음절 간 길이를 고르게 배분하고 또박또박 낭독하십시오.')}
+                            </p>
                           </div>
                         </div>
                       </div>
                     </div>
-
                   </div>
+
+                </div>
 
                 {/* Gemini AI Clinical Feedback Section */}
                 <AnimatePresence>
@@ -1921,7 +1997,7 @@ export default function DysarthriaTrainer() {
                         </div>
                       ) : (
                         <div className="space-y-5 text-sm text-gray-300 leading-relaxed">
-                          
+
                           {/* Assessment */}
                           <div className="space-y-1">
                             <h4 className="font-semibold text-white flex items-center gap-1.5 text-sm">
@@ -1956,7 +2032,7 @@ export default function DysarthriaTrainer() {
 
                           {/* Exercises & Drills list */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-800/80 pt-4">
-                            
+
                             {/* Recommended exercises */}
                             <div className="space-y-2">
                               <h5 className="text-xs text-teal-300 font-bold uppercase">추천 구강 안면 강화 운동</h5>
@@ -2006,7 +2082,7 @@ export default function DysarthriaTrainer() {
                 <div className="bg-gray-900 border border-gray-800 p-6 rounded-3xl shadow-sm text-center">
                   <span className="text-xs text-gray-400 uppercase tracking-wider block font-bold">총 완료 훈련 횟수</span>
                   <p className="text-4xl font-extrabold text-white mt-2 font-mono">
-                    {Object.values(stats.completedExercises).reduce((a, b) => a + b, 0)}회
+                    {totalCompletedExercises}회
                   </p>
                 </div>
                 <div className="bg-gray-900 border border-gray-800 p-6 rounded-3xl shadow-sm text-center">
@@ -2034,15 +2110,14 @@ export default function DysarthriaTrainer() {
 
               {/* Grid: Completed History & Breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                
+
                 {/* Exercise Distribution */}
                 <div className="bg-gray-900 border border-gray-800 p-6 rounded-3xl">
                   <h3 className="text-base font-bold text-white mb-4">재활 훈련 프로그램 분포 및 통계</h3>
                   <div className="space-y-4">
                     {EXERCISE_LIST.map((ex) => {
                       const count = stats.completedExercises[ex.id] || 0;
-                      const maxCompleted = Math.max(...Object.values(stats.completedExercises), 1);
-                      const percent = (count / maxCompleted) * 100;
+                      const percent = (count / maxCompletedExercises) * 100;
                       return (
                         <div key={ex.id} className="space-y-1">
                           <div className="flex justify-between text-xs text-gray-300">
@@ -2091,25 +2166,24 @@ export default function DysarthriaTrainer() {
                       <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
                         {sessionsHistory.map((session, idx) => {
                           const isExpanded = expandedSessionId === session.id;
-                          const formattedDate = session.timestamp 
+                          const formattedDate = session.timestamp
                             ? new Date(session.timestamp).toLocaleString('ko-KR', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
                             : '날짜 정보 없음';
 
                           return (
-                            <div 
-                              key={session.id || idx} 
-                              className={`bg-gray-950 rounded-2xl border transition-all duration-200 overflow-hidden ${
-                                isExpanded ? 'border-teal-500/40 shadow-lg shadow-teal-500/5' : 'border-gray-800/80 hover:border-gray-700'
-                              }`}
+                            <div
+                              key={session.id || idx}
+                              className={`bg-gray-950 rounded-2xl border transition-all duration-200 overflow-hidden ${isExpanded ? 'border-teal-500/40 shadow-lg shadow-teal-500/5' : 'border-gray-800/80 hover:border-gray-700'
+                                }`}
                             >
                               {/* Session Header Card */}
-                              <div 
+                              <div
                                 onClick={() => setExpandedSessionId(isExpanded ? null : session.id)}
                                 className="p-4 flex justify-between items-center cursor-pointer select-none"
                               >
@@ -2127,7 +2201,7 @@ export default function DysarthriaTrainer() {
                                     <span className="text-[9px] text-gray-500 font-mono block mt-1">{formattedDate}</span>
                                   </div>
                                 </div>
-                                
+
                                 <div className="flex items-center gap-4">
                                   <div className="text-right">
                                     <span className="text-[10px] text-gray-500 block">수행 점수</span>
@@ -2148,7 +2222,7 @@ export default function DysarthriaTrainer() {
                               {/* Expanded Session Details */}
                               <AnimatePresence>
                                 {isExpanded && (
-                                  <motion.div 
+                                  <motion.div
                                     initial={{ height: 0, opacity: 0 }}
                                     animate={{ height: 'auto', opacity: 1 }}
                                     exit={{ height: 0, opacity: 0 }}
@@ -2278,7 +2352,7 @@ export default function DysarthriaTrainer() {
               className="bg-gray-900 border border-gray-800 rounded-3xl p-8 max-w-3xl mx-auto space-y-6 text-sm text-gray-300 leading-relaxed"
             >
               <h3 className="text-xl font-bold text-white">마비성 구어장애 언어 재활 치료 프로그램 안내</h3>
-              
+
               <p>
                 <strong>렉시톤 마비성 구어장애 AI 트레이너(LexiTone Dysarthria Trainer)</strong>는 뇌졸중, 외상성 뇌손상, 또는 신경계통 질환 이후 발음 마비, 구어 실행증, 안면 근력 저하 및 대칭성 비대칭 문제를 겪고 계신 환자분들을 위한 첨단 바이오 피드백 자가 훈련 시스템입니다.
               </p>
@@ -2341,7 +2415,7 @@ export default function DysarthriaTrainer() {
                   <Activity className="w-12 h-12 animate-pulse" />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <h2 className="text-2xl font-black tracking-tight text-white">
                   렉시톤 구어 재활 AI
@@ -2373,7 +2447,7 @@ export default function DysarthriaTrainer() {
                   <LogIn className="w-4 h-4" />
                   Google 계정으로 시작하기
                 </button>
-                
+
                 <button
                   onClick={() => setDismissedWelcome(true)}
                   className="bg-transparent hover:bg-gray-800/50 text-gray-400 hover:text-white py-3 rounded-2xl text-xs font-semibold transition-all duration-200 border border-transparent hover:border-gray-800 cursor-pointer"
