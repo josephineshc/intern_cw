@@ -311,6 +311,62 @@ export default function DysarthriaTrainer() {
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [dismissedWelcome, setDismissedWelcome] = useState(false);
 
+  // Calibration references
+  const [isCalibrated, setIsCalibrated] = useState(false);
+  const [restingSmileWidth, setRestingSmileWidth] = useState(0.38);
+  const [restingPuckerRatio, setRestingPuckerRatio] = useState(0.12);
+  const [restingMouthOpen, setRestingMouthOpen] = useState(0.06);
+  const [calibrationCounter, setCalibrationCounter] = useState(0);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+
+  // Live trackers
+  const [liveSmile, setLiveSmile] = useState(0);
+  const [livePucker, setLivePucker] = useState(0);
+  const [liveOpen, setLiveOpen] = useState(0);
+  const [liveSymmetry, setLiveSymmetry] = useState(1);
+  const [liveLoudness, setLiveLoudness] = useState(0);
+  const [speechSuccessRate, setSpeechSuccessRate] = useState<number | null>(null);
+
+  // High Performance Trackers for Session Analytics (Passed to Gemini)
+  const [sessionMaxSmile, setSessionMaxSmile] = useState(0);
+  const [sessionMaxPucker, setSessionMaxPucker] = useState(0);
+  const [sessionMaxMouthOpen, setSessionMaxMouthOpen] = useState(0);
+  const [sessionSymmetryDeviation, setSessionSymmetryDeviation] = useState(0);
+  const [sessionAvgLoudness, setSessionAvgLoudness] = useState(0);
+  const [sessionLoudnessCount, setSessionLoudnessCount] = useState(0);
+  const [sessionSustainDuration, setSessionSustainDuration] = useState(0);
+
+  // Exercise state
+  const [isRunning, setIsRunning] = useState(false);
+  const [holdTimer, setHoldTimer] = useState(0);
+  const [exerciseComplete, setExerciseComplete] = useState(false);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<AiFeedbackResponse | null>(null);
+
+  // Media references
+  const [cameraLoading, setCameraLoading] = useState(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Web Audio refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioAnimationFrameRef = useRef<number | null>(null);
+  const [audioPermissionError, setAudioPermissionError] = useState(false);
+
+  // Speech Recognition refs
+  const [isListening, setIsListening] = useState(false);
+  const [speechTranscript, setSpeechTranscript] = useState('');
+  const recognitionRef = useRef<any>(null);
+
+  // Refs for tracking animation frames & Mediapipe loop
+  const faceMeshRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
+  const isPinchingRef = useRef<boolean>(false); // Used to avoid updates if component unmounts
+
   const [languageMode, setLanguageMode] = useState<'en' | 'ko_std' | 'ko_phon' | 'ko_dialect'>('ko_std');
   const [activeTab, setActiveTab] = useState<'exercises' | 'analytics' | 'about'>('exercises');
   const [selectedExercise, setSelectedExercise] = useState<Exercise>(() => {
@@ -433,62 +489,6 @@ export default function DysarthriaTrainer() {
       }).catch(err => console.error("Error saving updated points stats to profile:", err));
     }
   }, [stats.points, stats.completedExercises, stats.streak, currentUser]);
-
-  // Calibration references
-  const [isCalibrated, setIsCalibrated] = useState(false);
-  const [restingSmileWidth, setRestingSmileWidth] = useState(0.38);
-  const [restingPuckerRatio, setRestingPuckerRatio] = useState(0.12);
-  const [restingMouthOpen, setRestingMouthOpen] = useState(0.06);
-  const [calibrationCounter, setCalibrationCounter] = useState(0);
-  const [isCalibrating, setIsCalibrating] = useState(false);
-
-  // Live trackers
-  const [liveSmile, setLiveSmile] = useState(0);
-  const [livePucker, setLivePucker] = useState(0);
-  const [liveOpen, setLiveOpen] = useState(0);
-  const [liveSymmetry, setLiveSymmetry] = useState(1);
-  const [liveLoudness, setLiveLoudness] = useState(0);
-  const [speechSuccessRate, setSpeechSuccessRate] = useState<number | null>(null);
-
-  // High Performance Trackers for Session Analytics (Passed to Gemini)
-  const [sessionMaxSmile, setSessionMaxSmile] = useState(0);
-  const [sessionMaxPucker, setSessionMaxPucker] = useState(0);
-  const [sessionMaxMouthOpen, setSessionMaxMouthOpen] = useState(0);
-  const [sessionSymmetryDeviation, setSessionSymmetryDeviation] = useState(0);
-  const [sessionAvgLoudness, setSessionAvgLoudness] = useState(0);
-  const [sessionLoudnessCount, setSessionLoudnessCount] = useState(0);
-  const [sessionSustainDuration, setSessionSustainDuration] = useState(0);
-
-  // Exercise state
-  const [isRunning, setIsRunning] = useState(false);
-  const [holdTimer, setHoldTimer] = useState(0);
-  const [exerciseComplete, setExerciseComplete] = useState(false);
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
-  const [aiFeedback, setAiFeedback] = useState<AiFeedbackResponse | null>(null);
-
-  // Media references
-  const [cameraLoading, setCameraLoading] = useState(true);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Web Audio refs
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
-  const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const audioAnimationFrameRef = useRef<number | null>(null);
-  const [audioPermissionError, setAudioPermissionError] = useState(false);
-
-  // Speech Recognition refs
-  const [isListening, setIsListening] = useState(false);
-  const [speechTranscript, setSpeechTranscript] = useState('');
-  const recognitionRef = useRef<any>(null);
-
-  // Refs for tracking animation frames & Mediapipe loop
-  const faceMeshRef = useRef<any>(null);
-  const cameraRef = useRef<any>(null);
-  const isPinchingRef = useRef<boolean>(false); // Used to avoid updates if component unmounts
 
   // Reset metrics function
   function resetLivePerformanceMetrics() {
