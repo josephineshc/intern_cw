@@ -1,0 +1,11 @@
+{
+  "name": "LexiTone: Dysarthria AI Trainer",
+  "description": "An interactive speech and oral-motor rehabilitation workspace using live face tracking and vocal support analytics, powered by Gemini 2.5 Flash clinical feedback.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

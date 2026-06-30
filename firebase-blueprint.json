@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Represents the personalized configuration and statistics of a user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "isCalibrated": { "type": "boolean" },
+        "restingSmileWidth": { "type": "number" },
+        "restingPuckerRatio": { "type": "number" },
+        "restingMouthOpen": { "type": "number" },
+        "points": { "type": "number" },
+        "streak": { "type": "number" },
+        "completedExercises": {
+          "type": "object",
+          "properties": {
+            "speech_drill": { "type": "number" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "TrainingSession": {
+      "title": "Training Session",
+      "description": "Represents a single completed speech rehabilitation exercise session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "exerciseId": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "score": { "type": "number" },
+        "targetPhrase": { "type": "string" },
+        "transcript": { "type": "string" },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "maxSmileWidth": { "type": "number" },
+            "maxPuckerRatio": { "type": "number" },
+            "maxMouthOpen": { "type": "number" },
+            "leftRightAsymmetry": { "type": "number" },
+            "averageLoudness": { "type": "number" },
+            "vowelSustainDuration": { "type": "number" }
+          }
+        },
+        "feedback": {
+          "type": "object",
+          "properties": {
+            "assessment": { "type": "string" },
+            "phoneticFeedback": { "type": "string" },
+            "scoreExplanation": { "type": "string" },
+            "recommendedExercises": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "customDrills": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["id", "exerciseId", "timestamp", "score"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "The personal profile of the dysarthria rehabilitation user."
+    },
+    "users/{userId}/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/TrainingSession" },
+      "description": "The historical list of completed sessions for a given user."
+    }
+  }
+}
