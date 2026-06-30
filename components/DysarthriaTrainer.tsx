@@ -1142,6 +1142,7 @@ export default function DysarthriaTrainer() {
     let localCamera: any = null;
     let localPreviewStream: MediaStream | null = null;
     let previewFrameId: number | null = null;
+    let manualTrackingFrameId: number | null = null;
 
     const startCameraPreviewOnly = async (message: string) => {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -1164,7 +1165,11 @@ export default function DysarthriaTrainer() {
         const drawPreview = () => {
           if (!videoRef.current || !canvasRef.current) return;
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.save();
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
           previewFrameId = requestAnimationFrame(drawPreview);
         };
         drawPreview();
@@ -1178,6 +1183,39 @@ export default function DysarthriaTrainer() {
         );
         setCameraPreviewOnly(false);
         setCameraLoading(false);
+      }
+    };
+
+    const startManualFaceTracking = async () => {
+      if (!navigator.mediaDevices?.getUserMedia || !localFaceMesh) {
+        startCameraPreviewOnly("정밀 얼굴 추적을 시작하지 못해 카메라 미리보기만 표시합니다. 브라우저 권한과 네트워크 상태를 확인해 주세요.");
+        return;
+      }
+
+      try {
+        localPreviewStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: false,
+        });
+        video.srcObject = localPreviewStream;
+        await video.play();
+        setCameraPreviewOnly(false);
+        setCameraError(null);
+        setCameraLoading(false);
+
+        const sendFrame = async () => {
+          if (!videoRef.current || !localFaceMesh) return;
+          try {
+            await localFaceMesh.send({ image: videoRef.current });
+          } catch (e) {
+            console.error("Manual frame processing error:", e);
+          }
+          manualTrackingFrameId = requestAnimationFrame(sendFrame);
+        };
+        sendFrame();
+      } catch (err: any) {
+        console.error("Manual face tracking camera failed:", err);
+        startCameraPreviewOnly("정밀 얼굴 추적용 카메라 입력을 열 수 없습니다. 카메라 권한을 확인해 주세요.");
       }
     };
 
@@ -1351,10 +1389,10 @@ export default function DysarthriaTrainer() {
           .then(() => setCameraLoading(false))
           .catch((err: any) => {
             console.error(err);
-            startCameraPreviewOnly("정밀 얼굴 추적은 시작하지 못했지만, 카메라 미리보기는 사용할 수 있습니다. 권한을 확인한 뒤 새로고침해 주세요.");
+            startManualFaceTracking();
           });
       } else {
-        startCameraPreviewOnly("MediaPipe Camera 모듈을 불러오지 못해 정밀 얼굴 추적 없이 카메라 미리보기만 표시합니다. 네트워크 또는 CDN 차단을 확인해 주세요.");
+        startManualFaceTracking();
       }
     } else {
       startCameraPreviewOnly("MediaPipe FaceMesh를 불러오지 못해 정밀 얼굴 추적 없이 카메라 미리보기만 표시합니다. 네트워크 또는 CDN 차단을 확인해 주세요.");
@@ -1365,6 +1403,7 @@ export default function DysarthriaTrainer() {
 
     return () => {
       if (previewFrameId !== null) cancelAnimationFrame(previewFrameId);
+      if (manualTrackingFrameId !== null) cancelAnimationFrame(manualTrackingFrameId);
       if (localPreviewStream) localPreviewStream.getTracks().forEach(track => track.stop());
       if (video.srcObject) video.srcObject = null;
       if (localCamera) localCamera.stop();
@@ -1533,7 +1572,7 @@ export default function DysarthriaTrainer() {
                       ref={canvasRef}
                       width="640"
                       height="480"
-                      className="w-full h-full object-cover transform scale-x-[-1]"
+                      className="w-full h-full object-cover"
                     />
 
                     {/* Camera Loading Spinner */}
