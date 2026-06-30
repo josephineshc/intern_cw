@@ -1125,6 +1125,20 @@ export default function DysarthriaTrainer() {
     });
   }, [isCalibrating]);
 
+  const isCalibratingLatestRef = useRef(isCalibrating);
+  const isRunningLatestRef = useRef(isRunning);
+  const isCalibratedLatestRef = useRef(isCalibrated);
+  const handleCalibrationFrameLatestRef = useRef(handleCalibrationFrame);
+  const handleOralMotorMetricsLatestRef = useRef(handleOralMotorMetrics);
+
+  useEffect(() => {
+    isCalibratingLatestRef.current = isCalibrating;
+    isRunningLatestRef.current = isRunning;
+    isCalibratedLatestRef.current = isCalibrated;
+    handleCalibrationFrameLatestRef.current = handleCalibrationFrame;
+    handleOralMotorMetricsLatestRef.current = handleOralMotorMetrics;
+  }, [isCalibrating, isRunning, isCalibrated, handleCalibrationFrame, handleOralMotorMetrics]);
+
   // MediaPipe FaceMesh initialization
   useEffect(() => {
     const video = videoRef.current;
@@ -1139,7 +1153,6 @@ export default function DysarthriaTrainer() {
     if (!ctx) return;
 
     let localFaceMesh: any = null;
-    let localCamera: any = null;
     let localPreviewStream: MediaStream | null = null;
     let previewFrameId: number | null = null;
     let manualTrackingFrameId: number | null = null;
@@ -1215,7 +1228,14 @@ export default function DysarthriaTrainer() {
         sendFrame();
       } catch (err: any) {
         console.error("Manual face tracking camera failed:", err);
-        startCameraPreviewOnly("정밀 얼굴 추적용 카메라 입력을 열 수 없습니다. 카메라 권한을 확인해 주세요.");
+        const denied = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
+        setCameraError(
+          denied
+            ? "카메라 권한이 차단되었습니다. 브라우저 주소창의 권한 설정에서 카메라를 허용해 주세요."
+            : "카메라를 열 수 없습니다. 다른 앱이 카메라를 사용 중인지 확인해 주세요."
+        );
+        setCameraPreviewOnly(false);
+        setCameraLoading(false);
       }
     };
 
@@ -1282,13 +1302,13 @@ export default function DysarthriaTrainer() {
           setLiveSymmetry(rawSymmetry);
 
           // Manage calibration accumulation
-          if (isCalibrating) {
-            handleCalibrationFrame(smileRatio, puckerRatio, openRatio);
+          if (isCalibratingLatestRef.current) {
+            handleCalibrationFrameLatestRef.current(smileRatio, puckerRatio, openRatio);
           }
 
           // Exercise validation holds
-          if (isRunning && isCalibrated) {
-            handleOralMotorMetrics(smileRatio, puckerRatio, openRatio, rawSymmetry);
+          if (isRunningLatestRef.current && isCalibratedLatestRef.current) {
+            handleOralMotorMetricsLatestRef.current(smileRatio, puckerRatio, openRatio, rawSymmetry);
           }
 
           // Draw clinical overlays on the canvas (directly mapped in mirrored coords)
@@ -1370,48 +1390,24 @@ export default function DysarthriaTrainer() {
         minTrackingConfidence: 0.6,
       });
       localFaceMesh.onResults(onResults);
-
-      if (window.Camera) {
-        localCamera = new window.Camera(video, {
-          onFrame: async () => {
-            if (videoRef.current && localFaceMesh) {
-              try {
-                await localFaceMesh.send({ image: videoRef.current });
-              } catch (e) {
-                console.error("Frame processing error:", e);
-              }
-            }
-          },
-          width: 640,
-          height: 480,
-        });
-        localCamera.start()
-          .then(() => setCameraLoading(false))
-          .catch((err: any) => {
-            console.error(err);
-            startManualFaceTracking();
-          });
-      } else {
-        startManualFaceTracking();
-      }
+      startManualFaceTracking();
     } else {
       startCameraPreviewOnly("MediaPipe FaceMesh를 불러오지 못해 정밀 얼굴 추적 없이 카메라 미리보기만 표시합니다. 네트워크 또는 CDN 차단을 확인해 주세요.");
     }
 
     faceMeshRef.current = localFaceMesh;
-    cameraRef.current = localCamera;
+    cameraRef.current = null;
 
     return () => {
       if (previewFrameId !== null) cancelAnimationFrame(previewFrameId);
       if (manualTrackingFrameId !== null) cancelAnimationFrame(manualTrackingFrameId);
       if (localPreviewStream) localPreviewStream.getTracks().forEach(track => track.stop());
       if (video.srcObject) video.srcObject = null;
-      if (localCamera) localCamera.stop();
       if (localFaceMesh) localFaceMesh.close();
       stopAudioTracking();
       stopSpeechRecognition();
     };
-  }, [isCalibrating, handleCalibrationFrame, handleOralMotorMetrics]);
+  }, []);
 
   // Handle auto speech audio state cleanup
   useEffect(() => {
