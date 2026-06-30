@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LexiTone Dysarthria AI Trainer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- MediaPipe Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1637598807/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.1626659502/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559585/face_mesh.js" crossorigin="anonymous"></script>
+    <style>
+      body {
+        margin: 0;
+        background-color: #121212; /* Material Dark Background */
+        color: #e3e3e3;
+        overflow-x: hidden;
+        font-family: 'Roboto', sans-serif;
+      }
+      video {
+        transform: scaleX(-1); /* Mirror effect for natural feel */
+        display: none; /* We draw video to canvas, so hide original */
+      }
+    </style>
+
+  <script type="module" crossorigin src="./assets/index-BxtuqSGV.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+</body>
+</html>
